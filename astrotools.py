@@ -4,11 +4,14 @@ The module **astrotools** is a set of functions for astrophysical analysis devel
 :Authors:
 	Dan Feldman, Alejandro N |uacute| |ntilde| ez, Damian Sowinski
 
-:Version:
-    1.0 of 2012/03/16
+:Date:
+    2012/04/28
 
 :Repository:
     https://github.com/BDNYC/astrotools (for access, contact jfilippazzo@gmail.com)
+
+:Requirements:
+    The following modules should already be installed in your computer: asciidata, matplotlib, numpy, pyfits, and scipy.
 
 '''
 
@@ -19,7 +22,6 @@ import matplotlib
 import numpy
 import os
 import pyfits
-import pylab
 import matplotlib.pyplot as plt
 import scipy
 import types
