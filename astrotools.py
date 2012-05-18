@@ -1,3 +1,4 @@
+# I ++++++++++++++++++++++ GENERAL DOCUMENTATION ++++++++++++++++++++++++++++++
 '''
 The module **astrotools** is a set of functions for astrophysical analysis developed by Kelle Cruz's team at Hunter College and the American Museum of Natural History in New York City. It consists of an amalgamation of functions tailored primordialy to handle fits file spectral data.
 
@@ -5,39 +6,56 @@ The module **astrotools** is a set of functions for astrophysical analysis devel
 	Dan Feldman, Alejandro N |uacute| |ntilde| ez, Damian Sowinski
 
 :Date:
-    2012/04/28
+    2012/05/18
 
 :Repository:
-    https://github.com/BDNYC/astrotools (for access, contact jfilippazzo@gmail.com)
+    https://github.com/BDNYC/astrotools
 
+:Contact: bdnyc.labmanager@gmail.com
+     
 :Requirements:
-    The following modules should already be installed in your computer: asciidata, matplotlib, numpy, pyfits, and scipy.
+    The following modules should already be installed in your computer: `asciidata`_, `matplotlib`_, `numpy`_, `pyfits`_, and `scipy`_.
 
 '''
 
-#+++++++++++++++++++++++++++++ RELEVANT MODULES +++++++++++++++++++++++++++++++
-# Modules used by functions and classes
+# II ++++++++++++++++++++++++ EXTERNAL MODULES ++++++++++++++++++++++++++++++++
+# External Python modules used by functions and classes
+
+# Basic Python modules
+import os
+import pdb
+import types
+
+# Third party Python modules
 import asciidata
 import matplotlib
-import numpy
-import os
-import pyfits
 import matplotlib.pyplot as plt
+import numpy
+import pyfits
 import scipy
-import types
+import scipy.ndimage
 from scipy import interpolate
-import pdb
 
-# +++++++++++++++++++++++++++ GLOBAL FUNCTIONS ++++++++++++++++++++++++++++++++
-# Functions meant to be used by end users of astrotools
-def avg_flux(startW, endW, SpecData, sum=True, median=False, verbose=True):
+# III +++++++++++++++++++++++ PUBLIC FUNCTIONS ++++++++++++++++++++++++++++++++
+# Functions meant to be used by end users of astrotools. Use only lower case characters to name functions.
+def avg_flux(startW, endW, SpecData, median=False, verbose=True):
     '''
     (by Damian & Dan)
     
-    Calculate the average flux of ... something.
+    Calculate the average (or median) flux value on a spectral wavelength range. The output is a numpy float value containing either the average or median flux value in the provided wavelength range.
     
-    PARAMETERS...
+    This function mimics IDL avgflux (by Kelle Cruz).
     
+    *startW*
+      The lower limit of the wavelength range.
+    *endW*
+      The upper limit of the wavelength range.
+    *SpecData*
+      Spectrum as a Python list or array with wavelength in position 0 and flux in position 1.
+    *median*
+      Boolean: Find the median instead of the average.
+    *verbose*
+      Boolean: Print warning messages.
     
     '''
     
@@ -51,17 +69,17 @@ def avg_flux(startW, endW, SpecData, sum=True, median=False, verbose=True):
     # See if the wavelength range falls inside the wavelength array
     if numpy.min(Wavelength_big) > startW or numpy.max(Wavelength_big) < endW:
         if verbose == True:
-            print "avg_flux: wavelength interval out of range"
+            print 'avg_flux: wavelength interval out of range'
         return
     # See that wavelength range does not fall between data points in 
     # wavelength array
-    set1 = set(list(numpy.where( Wavelength_big >= startW )[0]))
+    set1 = set(list(numpy.where( Wavelength_big >= startW)[0]))
     newEnd = endW + .0022
     set2 = set(list(numpy.where(Wavelength_big <= endW + .0022)[0]))
     temp = numpy.array(list(set1.intersection(set2)))
     if len(temp) == 0:
-        if verbose  == True:
-            print "avg_flux: there is no data in the selected interval"
+        if verbose == True:
+            print 'avg_flux: there is no data in the selected interval'
         return
     
     # Winds the pixel scale
@@ -69,7 +87,7 @@ def avg_flux(startW, endW, SpecData, sum=True, median=False, verbose=True):
     pix_scale = Wavelength_big[temp[0]+1] - Wavelength_big[temp[0]]
     
     # Find wavelengths in array that are in interval and make a new array
-    set1 = set(list(numpy.where( Wavelength_big + pix_scale/2 >= startW )[0]))
+    set1 = set(list(numpy.where(Wavelength_big + pix_scale / 2 >= startW)[0]))
     set2 = set(list(numpy.where(Wavelength_big - pix_scale / 2 <= endW)[0]))
     # For some reason, temp1 may be slightly out of order, so sort it:
     temp1 = numpy.array(list(set1.intersection(set2)))
@@ -81,8 +99,8 @@ def avg_flux(startW, endW, SpecData, sum=True, median=False, verbose=True):
     last = num_pixels - 1
     if num_pixels >= 1:
     # Determine fractional pixel value on the edge of the region
-        frac1 = ( Wavelength[first] + pix_scale / 2 - startW ) / pix_scale
-        frac2 = ( endW - Wavelength[last] + pix_scale / 2 ) / pix_scale
+        frac1 = (Wavelength[first] + pix_scale / 2 - startW) / pix_scale
+        frac2 = (endW - Wavelength[last] + pix_scale / 2) / pix_scale
         #sums the fluxes in the interval
         sumflux = 0
         for n in numpy.arange(first, num_pixels):
@@ -102,22 +120,74 @@ def avg_flux(startW, endW, SpecData, sum=True, median=False, verbose=True):
     
     if median == True and num_pixels > 5:
         if verbose == True:
-            print "median worked"
+            print 'median worked'
         old = avgflux
         avgflux = numpy.median(Flux)
-    
-        if 100 * numpy.abs( avgflux - old ) / old > 3:
-            print "avg_flux: WARNING: difference between average and median ' \
-                  & 'is greater than 3%"
-            print "avg_flux: median = " + str(avgflux) + ",\t"+ " average = " \
+        
+        if 100 * numpy.abs(avgflux - old) / old > 3:
+            print 'avg_flux: WARNING: difference between average and median ' \
+                  & 'is greater than 3%'
+            print 'avg_flux: median = ' + str(avgflux) + ',\t' + ' average = ' \
                   + str(old)
-            print "avg_flux: difference % = " + \
-                  str(100 * numpy.abs( avgflux - old ) / old)
+            print 'avg_flux: difference % = ' + \
+                  str(100 * numpy.abs(avgflux - old) / old)
         else:
             if verbose == True:
-                print "median worked"
+                print 'median worked'
     
     return avgflux
+
+
+def create_ascii(listObj, saveto=None, header=None, delimiter='\t'):
+    '''
+    (by Alejandro N |uacute| |ntilde| ez)
+    
+    Save data from a Python list into an ascii file. It returns an asciidata type instance defined in the *asciidata* module.
+    
+    *listObj*
+        Python list object with data to be saved.
+    *saveto*
+        String with name for ascii file. If no full path is provided, ascii file is created in the current directory. If no name is provided, ascii file is not created, only asciidata type instance is returned. This file name does not need to include extension (e.g. ".txt").
+    *header*
+        String or Python list of strings to be included as header information for the ascii file. This string (or list of strings) will appear as comments at the top of the ascii file contents.
+    *delimiter*
+        String specifying the delimiter desired for the ascii file. The default is *tab delimited*.
+    '''
+    # Initialize variables
+    DELIMITER = '\t'
+    
+    # Determine important parameters
+    numCols = len(listObj)
+    numRows = 0
+    for col in listObj:
+        if len(col) > numRows:
+            numRows = len(col)
+    
+    # Create ascii table
+    asciiObj = asciidata.create(numCols, numRows, delimiter=DELIMITER)
+    
+    # Populate the asciidata table
+    for colIdx in range(asciiObj.ncols):
+        for rowIdx in range(len(listObj[colIdx])):
+            asciiObj[colIdx][rowIdx] = listObj[colIdx][rowIdx]
+    
+    # Add header info
+    if header is not None:
+        if isinstance(header, types.StringTypes):
+            asciiObj.header.append(header)
+        else:
+            for headerRow in header:
+                asciiObj.header.append(headerRow)
+    
+    # Save file
+    if saveto is not None:
+        fileTp = '.txt'
+        try:
+            asciiObj.writeto(saveto + fileTp)
+        except IOError:
+            print 'Invalid name/location to save ascii file.'
+    
+    return asciiObj
 
 
 def integrate(xyData):
@@ -159,7 +229,7 @@ def mean_comb(spectra):
     
     Combine spectra using a weighted mean. *Uncertainties are required* for this function. The mask wavelength array will be that of the first spectrum in the *spectra* list. The output is a python list with mask wavelength in position 0, combined flux in position 1, and combined uncertainties in position 2.
     
-    This function mimics mc_meancomb (by Mike Cushing), with some restrictions.
+    This function mimics IDL mc_meancomb (by Mike Cushing), with some restrictions.
     
     *spectra*
         Python list of spectra, where each spectrum is a python list as well, having wavelength in position 0, flux in position 1 and uncertainties in position 2. *Important*: flux array cannot have nan values.
@@ -345,7 +415,13 @@ def plot_spec(specData, ploterrors=False):
     if allNone:
         return
     
+    # Fix specData list dimensions when necessary
+    if len(specData) == 2 or len(specData) == 3:
+        if len(specData[0]) > 3:
+            specData = [specData]
+    
     # Initialize figure
+    plt.close()
     fig = plt.figure(1)
     fig.clf()
     
@@ -378,7 +454,7 @@ def plot_spec(specData, ploterrors=False):
     return fig
 
 
-def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=False, plot=False, warn=False):
+def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=False, plot=False, verbose=False):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
@@ -396,13 +472,12 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         Boolean: Return error values for the flux data; return nans if unavailable.
     *plot*
         Boolean: Plot the spectral data, including error bars when available
-    *warn*
-        Boolean: Show warning messages
+    *verbose*
+        Boolean: Print warning messages
     '''
-    import astrotools as at
     
     # 1. Convert specFiles into a list type if it is a string
-    if isinstance(specFiles,types.StringTypes):
+    if isinstance(specFiles, types.StringTypes):
         specFiles = [specFiles,]
     
     try:
@@ -427,7 +502,7 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         # 3.2. Check if data in fits file is linear (if not, don't use data)
         KEY_TYPE = ['CTYPE1']
         setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
-        if len(setType) == 0 and warn:
+        if len(setType) == 0 and verbose:
             print 'Flux data in ' + spFile + ' assumed to be linear.'
         if len(setType) != 0:
             valType = fitsHeader[setType.pop()]
@@ -468,7 +543,7 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
             negIdx = numpy.where(specData[spFileIdx][1] < 0)
             if len(negIdx[0]) > 0:
                 specData[spFileIdx][1][negIdx] = 0
-                if warn:
+                if verbose:
                     print 'FLUX DATA: %i negative data points found in %s.' \
                             % (len(negIdx[0]), spFile)
         
@@ -588,7 +663,7 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
     Smooth flux data to resolution specified. The original spectrum resolution is determined more accurately by reading the metadata of the spectrum, and so this function prefers access to the fits file from where the spectrum was obtained, but it is not necessary.
     
     *specData*
-        Spectrum as a Python list with wavelength in position 0, flux in position 1, and optional error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
+        Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
     *specFiles*
         String with name of the fits file (with full path) from where the spectrum was obtained; if dealing with several spectra, *specFiles* shall be a list of strings.
     *goodRes*
@@ -596,24 +671,30 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
     *winWidth*
         Float with width of smoothing window; used when spectrum resolution is unknown.
     '''
-    
-    import scipy.ndimage
+    # Define key names for resolution in fits file
+    KEY_RES = ['RES','RP']
     
     # Convert into python list type when only one set of spectrum & fits-file
+    fitsExist = True
     if isinstance(specFiles,types.StringTypes):
         specFiles = [specFiles,]
         specData  = [specData,]
+    else:
+        fitsExist = False
     
     for specIdx,spec in enumerate(specData):
         if spec is not None:
-            if specFiles[specIdx] is not None:
-                # Get RES data from fits file header
+            if fitsExist and specFiles[specIdx] is not None:
                 fitsData = pyfits.open(specFiles[specIdx])
-                try:
-                    origRes = int(fitsData[0].header['res'])
-                except KeyError:
+                # Find Key names for resolution in fits file header
+                setRes = set(KEY_RES).intersection(set(fitsData[0].header.keys()))
+                # Get resolution data from fits file header
+                if len(setRes) > 0:
+                    keyName = setRes.pop()
+                    origRes = int(fitsData[0].header[keyName])
+                else:
                     origRes = 0
-                    fitsData.close()
+                fitsData.close()
             else:
                 origRes = 0
             
@@ -633,31 +714,8 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
     return specData
 
 
-# +++++++++++++++++++++++++ SECONDARY FUNCTIONS +++++++++++++++++++++++++++++++
-# Functions used by Global Functions; these are not meant to be used directly 
-# by end users of astrotools
-def __normalize(specData):
-# *Function used by read_spec only*
-# (by Alejo)
-# Normalizes the flux (and sigma if present) data using the mean flux of the
-# whole set.
-    
-    specFlux = specData[1]
-    
-    if len(specData) == 3:
-        specSigma = specData[2]
-    
-    nonNanFlux = specFlux[numpy.isfinite(specFlux)]
-    avgFlux = numpy.mean(nonNanFlux)
-    
-    specData[1] = specFlux / avgFlux
-    if len(specData) == 3:
-        specData[2] = specSigma / avgFlux
-    
-    return specData
-    
-
-
+# IV ++++++++++++++++++++ NON-PUBLIC FUNCTIONS ++++++++++++++++++++++++++++++++
+# Functions used by Global Functions; these are not meant to be used directly by end users of astrotools. Precede function names by double underscore.
 def __create_waxis(fitsHeader, lenData, fileName):
 # *Function used by read_spec only*
 # (by Alejo)
@@ -796,6 +854,27 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
     
 
 
-# ++++++++++++++++++++++++++++++++ CLASSES ++++++++++++++++++++++++++++++++++++
-# Add you class here
+def __normalize(specData):
+# *Function used by read_spec only*
+# (by Alejo)
+# Normalizes the flux (and sigma if present) data using the mean flux of the
+# whole set.
+    
+    specFlux = specData[1]
+    
+    if len(specData) == 3:
+        specSigma = specData[2]
+    
+    nonNanFlux = specFlux[numpy.isfinite(specFlux)]
+    avgFlux = numpy.mean(nonNanFlux)
+    
+    specData[1] = specFlux / avgFlux
+    if len(specData) == 3:
+        specData[2] = specSigma / avgFlux
+    
+    return specData
+    
+
+# V +++++++++++++++++++++++++ PUBLIC CLASSES ++++++++++++++++++++++++++++++++++
+# Classes meant to be used by end users of astrotools. Capitalize class names.
     
