@@ -40,9 +40,14 @@ from scipy import interpolate
 # Functions meant to be used by end users of astrotools. Use only lower case characters to name functions.
 def avg_flux(startW, endW, SpecData, median=False, verbose=True):
     '''
-    (by Damian & Dan)
+    (by Damian, Dan, & Jocelyn)
     
-    Calculate the average (or median) flux value on a spectral wavelength range. The output is a numpy float value containing either the average or median flux value in the provided wavelength range.
+    Calculate the average (or median) flux value on a spectral
+    wavelength range. The output is a list of two numpy float values containing
+    either the average or median flux value in the provided wavelength
+    range, and the standard deviation. If the uncertainty array is included in 
+    SpecData (position 2), a weighted standard deviation for the average flux is 
+    calculated. If not, the sample variance is used to estimate uncertainty.
     
     This function mimics IDL avgflux (by Kelle Cruz).
     
@@ -51,7 +56,8 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
     *endW*
       The upper limit of the wavelength range.
     *SpecData*
-      Spectrum as a Python list or array with wavelength in position 0 and flux in position 1.
+      Spectrum as a Python list or array with wavelength in position 0
+      and flux in position 1. Optional: uncertainty in position 2.
     *median*
       Boolean: Find the median instead of the average.
     *verbose*
@@ -66,6 +72,12 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         Wavelength_big = numpy.array( Wavelength_big)
     if not(isinstance(Flux_big, numpy.ndarray)):
         Flux_big = numpy.array( Flux_big)
+
+    if len(SpecData) >= 3:
+        Sigma_big = SpecData[2]
+        if not(isinstance(Sigma_big, numpy.ndarray)):
+            Sigma_big = numpy.array( Sigma_big)
+    
     # See if the wavelength range falls inside the wavelength array
     if numpy.min(Wavelength_big) > startW or numpy.max(Wavelength_big) < endW:
         if verbose == True:
@@ -94,6 +106,8 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
     temp  = numpy.sort(temp1)
     Wavelength = Wavelength_big[temp]
     Flux = Flux_big[temp]
+    if len(SpecData) >= 3:
+        Sigma = Sigma_big[temp]
     num_pixels = len(Wavelength)
     first = 0
     last = num_pixels - 1
@@ -103,6 +117,7 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         frac2 = (endW - Wavelength[last] + pix_scale / 2) / pix_scale
         #sums the fluxes in the interval
         sumflux = 0
+        sumsigma2 = 0
         for n in numpy.arange(first, num_pixels):
             if n == first:
                 pixflux = frac1 * Flux[n]
@@ -111,9 +126,31 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
             else:
                 pixflux = Flux[n]
             sumflux = sumflux + pixflux
+            
+            if len(SpecData) >= 3:
+                if n == first:
+                    sigflux2 = frac1**2 * Sigma[n]**2
+                if n == last:
+                    sigflux2 = frac2**2 * Sigma[n]**2
+                else:
+                    sigflux2 = Sigma[n]**2
+                sumsigma2 += sigflux2
+
         realpix = num_pixels - 2 + frac1 + frac2
         avgflux = sumflux / realpix
-    
+        
+        #Use the sample variance if the sigma spectrum is not present
+        #to estimate uncertainty
+        if len(SpecData) >= 3:
+            sigflux = numpy.sqrt(sumsigma2) / realpix
+        else:
+            elementdev = 0
+            sumdev = 0
+            for x in range(len(Flux)):
+                elementdev = Flux[x] - numpy.mean(Flux)
+                sumdev += elementdev**2
+            sigflux = numpy.sqrt((sumdev)/(num_pixels-1)) / numpy.sqrt(num_pixels)
+
     else:
         frac = (endW - startW) / pix_scale
         avgflux = frac * Flux[0]
@@ -134,8 +171,8 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         else:
             if verbose == True:
                 print 'median worked'
-    
-    return avgflux
+        
+    return [avgflux, sigflux]
 
 
 def create_ascii(listObj, saveto=None, header=None, delimiter='\t'):
