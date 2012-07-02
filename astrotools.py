@@ -72,7 +72,7 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         Wavelength_big = numpy.array( Wavelength_big)
     if not(isinstance(Flux_big, numpy.ndarray)):
         Flux_big = numpy.array( Flux_big)
-
+    
     if len(SpecData) >= 3:
         Sigma_big = SpecData[2]
         if not(isinstance(Sigma_big, numpy.ndarray)):
@@ -135,7 +135,7 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
                 else:
                     sigflux2 = Sigma[n]**2
                 sumsigma2 += sigflux2
-
+        
         realpix = num_pixels - 2 + frac1 + frac2
         avgflux = sumflux / realpix
         
@@ -149,8 +149,9 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
             for x in range(len(Flux)):
                 elementdev = Flux[x] - numpy.mean(Flux)
                 sumdev += elementdev**2
-            sigflux = numpy.sqrt((sumdev)/(num_pixels-1)) / numpy.sqrt(num_pixels)
-
+            sigflux = numpy.sqrt((sumdev)/(num_pixels-1)) \
+                      / numpy.sqrt(num_pixels)
+    
     else:
         frac = (endW - startW) / pix_scale
         avgflux = frac * Flux[0]
@@ -536,17 +537,18 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
             print 'FITS FILE: ' + spFile + ' was not found.'
             continue
         
-        # 3.2. Check if data in fits file is linear (if not, don't use data)
-        KEY_TYPE = ['CTYPE1']
-        setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
-        if len(setType) == 0 and verbose:
-            print 'Flux data in ' + spFile + ' assumed to be linear.'
-        if len(setType) != 0:
-            valType = fitsHeader[setType.pop()]
-            if valType.strip().upper() != 'LINEAR':
-                print 'Flux data in file ' + spFile \
-                      + ' is NOT linear and will not be used.'
-                continue
+        # Section 3.2 commented out on 6/20/2012. Not necessary?
+        # # 3.2. Check if data in fits file is linear (if not, don't use data)
+        # KEY_TYPE = ['CTYPE1']
+        # setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
+        # if len(setType) == 0 and verbose:
+        #     print 'Flux data in ' + spFile + ' assumed to be linear.'
+        # if len(setType) != 0:
+        #     valType = fitsHeader[setType.pop()]
+        #     if valType.strip().upper() != 'LINEAR':
+        #         print 'Flux data in file ' + spFile \
+        #               + ' is NOT linear and will not be used.'
+        #         continue
         
         # 3.3. Get flux, error data, and get wl data when available
         #      (returns wl in pos. 0, flux in pos. 1, error values in pos. 2)
