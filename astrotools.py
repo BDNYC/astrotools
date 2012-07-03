@@ -534,7 +534,7 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         try:
             fitsData, fitsHeader = pyfits.getdata(spFile, header=True)
         except IOError:
-            print 'FITS FILE: ' + spFile + ' was not found.'
+            print str(spFile) + ' not found.'
             continue
         
         # Section 3.2 commented out on 6/20/2012. Not necessary?
@@ -583,7 +583,7 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
             if len(negIdx[0]) > 0:
                 specData[spFileIdx][1][negIdx] = 0
                 if verbose:
-                    print 'FLUX DATA: %i negative data points found in %s.' \
+                    print '%i negative data points found in %s.' \
                             % (len(negIdx[0]), spFile)
         
         # 3.8. Normalize flux data, if requested
@@ -789,7 +789,7 @@ def __create_waxis(fitsHeader, lenData, fileName):
         
     else:
         wAxis = None
-        print 'create_waxis: Could not re-create a wavelength axis for ' \
+        print 'Could not re-create a wavelength axis for ' \
               + fileName + '.'
     
     return wAxis
@@ -857,7 +857,7 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
     if fluxIdx is None:
     # No interpretation known for .fits file data sets
         validData = None
-        print 'get_spec: Unable to interpret data sets in ' + fileName + '.'
+        print 'Unable to interpret data sets in ' + fileName + '.'
         return validData
     else:
         if waveIdx is not None:
