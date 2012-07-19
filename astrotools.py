@@ -30,11 +30,11 @@ import types
 import asciidata
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy
-import pyfits
-import scipy
-import scipy.ndimage
-from scipy import interpolate
+import numpy as np
+import pyfits as pf
+import scipy.interpolate as spi
+import scipy.ndimage as spn
+import scipy.stats as sps
 
 # III +++++++++++++++++++++++ PUBLIC FUNCTIONS ++++++++++++++++++++++++++++++++
 # Functions meant to be used by end users of astrotools. Use only lower case characters to name functions.
@@ -68,42 +68,42 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
     Wavelength_big = SpecData[0]
     Flux_big = SpecData[1]
     
-    if not(isinstance(Wavelength_big, numpy.ndarray)):
-        Wavelength_big = numpy.array( Wavelength_big)
-    if not(isinstance(Flux_big, numpy.ndarray)):
-        Flux_big = numpy.array( Flux_big)
+    if not(isinstance(Wavelength_big, np.ndarray)):
+        Wavelength_big = np.array( Wavelength_big)
+    if not(isinstance(Flux_big, np.ndarray)):
+        Flux_big = np.array( Flux_big)
     
     if len(SpecData) >= 3:
         Sigma_big = SpecData[2]
-        if not(isinstance(Sigma_big, numpy.ndarray)):
-            Sigma_big = numpy.array( Sigma_big)
+        if not(isinstance(Sigma_big, np.ndarray)):
+            Sigma_big = np.array( Sigma_big)
     
     # See if the wavelength range falls inside the wavelength array
-    if numpy.min(Wavelength_big) > startW or numpy.max(Wavelength_big) < endW:
+    if np.min(Wavelength_big) > startW or np.max(Wavelength_big) < endW:
         if verbose == True:
             print 'avg_flux: wavelength interval out of range'
         return
     # See that wavelength range does not fall between data points in 
     # wavelength array
-    set1 = set(list(numpy.where( Wavelength_big >= startW)[0]))
+    set1 = set(list(np.where( Wavelength_big >= startW)[0]))
     newEnd = endW + .0022
-    set2 = set(list(numpy.where(Wavelength_big <= endW + .0022)[0]))
-    temp = numpy.array(list(set1.intersection(set2)))
+    set2 = set(list(np.where(Wavelength_big <= endW + .0022)[0]))
+    temp = np.array(list(set1.intersection(set2)))
     if len(temp) == 0:
         if verbose == True:
             print 'avg_flux: there is no data in the selected interval'
         return
     
     # Winds the pixel scale
-    temp = numpy.where(Wavelength_big >= startW)[0]
+    temp = np.where(Wavelength_big >= startW)[0]
     pix_scale = Wavelength_big[temp[0]+1] - Wavelength_big[temp[0]]
     
     # Find wavelengths in array that are in interval and make a new array
-    set1 = set(list(numpy.where(Wavelength_big + pix_scale / 2 >= startW)[0]))
-    set2 = set(list(numpy.where(Wavelength_big - pix_scale / 2 <= endW)[0]))
+    set1 = set(list(np.where(Wavelength_big + pix_scale / 2 >= startW)[0]))
+    set2 = set(list(np.where(Wavelength_big - pix_scale / 2 <= endW)[0]))
     # For some reason, temp1 may be slightly out of order, so sort it:
-    temp1 = numpy.array(list(set1.intersection(set2)))
-    temp  = numpy.sort(temp1)
+    temp1 = np.array(list(set1.intersection(set2)))
+    temp  = np.sort(temp1)
     Wavelength = Wavelength_big[temp]
     Flux = Flux_big[temp]
     if len(SpecData) >= 3:
@@ -118,7 +118,7 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         #sums the fluxes in the interval
         sumflux = 0
         sumsigma2 = 0
-        for n in numpy.arange(first, num_pixels):
+        for n in np.arange(first, num_pixels):
             if n == first:
                 pixflux = frac1 * Flux[n]
             elif n == last:
@@ -142,15 +142,15 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         #Use the sample variance if the sigma spectrum is not present
         #to estimate uncertainty
         if len(SpecData) >= 3:
-            sigflux = numpy.sqrt(sumsigma2) / realpix
+            sigflux = np.sqrt(sumsigma2) / realpix
         else:
             elementdev = 0
             sumdev = 0
             for x in range(len(Flux)):
-                elementdev = Flux[x] - numpy.mean(Flux)
+                elementdev = Flux[x] - np.mean(Flux)
                 sumdev += elementdev**2
-            sigflux = numpy.sqrt((sumdev)/(num_pixels-1)) \
-                      / numpy.sqrt(num_pixels)
+            sigflux = np.sqrt((sumdev)/(num_pixels-1)) \
+                      / np.sqrt(num_pixels)
     
     else:
         frac = (endW - startW) / pix_scale
@@ -160,20 +160,54 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         if verbose == True:
             print 'median worked'
         old = avgflux
-        avgflux = numpy.median(Flux)
+        avgflux = np.median(Flux)
         
-        if 100 * numpy.abs(avgflux - old) / old > 3:
+        if 100 * np.abs(avgflux - old) / old > 3:
             print 'avg_flux: WARNING: difference between average and median ' \
                   & 'is greater than 3%'
             print 'avg_flux: median = ' + str(avgflux) + ',\t' + ' average = ' \
                   + str(old)
             print 'avg_flux: difference % = ' + \
-                  str(100 * numpy.abs(avgflux - old) / old)
+                  str(100 * np.abs(avgflux - old) / old)
         else:
             if verbose == True:
                 print 'median worked'
         
     return [avgflux, sigflux]
+
+
+def clean_outliers(data, thresh):
+    '''
+    (by Alejandro N |uacute| |ntilde| ez)
+    Cleans a data from outliers by replacing them with numpy nans. A point *x* is identified as an outlier if |*x* - *med*| / *MAD* > thresh, where *med* is the median of the data values and *MAD* is the median absolute deviation, defined as 1.482 * median(|*x* - *med*|).
+    
+    This function mimics IDL mc_findoutliers (by Mike Cushing), with output differences.
+    
+    *data*
+      Array with data values.
+    *thresh*
+      The sigma threshold that defines data outliers.
+    '''
+    # Check inputs
+    try:
+        data[0]
+    except TypeError:
+        print 'Data invalid.'
+        return
+    
+    # Calculate median and median absolute deviation
+    med = sps.nanmedian(data)
+    mad = 1.482 * sps.nanmedian(abs(data-med))
+    
+    dataClean = np.array(data).copy()
+    if mad == 0:
+        print 'MAD is equal to zero.'
+    else:
+        outlierIdx = np.where(abs((dataClean - med) / mad) > thresh)
+        if len(outlierIdx) != 0:
+            dataClean[outlierIdx] = np.nan
+    
+    return dataClean
 
 
 def create_ascii(listObj, saveto=None, header=None, delimiter='\t'):
@@ -261,49 +295,107 @@ def integrate(xyData):
     return integral
 
 
-def mean_comb(spectra):
+def mean_comb(spectra, mask=None, robust=None):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
-    Combine spectra using a weighted mean. *Uncertainties are required* for this function. The mask wavelength array will be that of the first spectrum in the *spectra* list. The output is a python list with mask wavelength in position 0, combined flux in position 1, and combined uncertainties in position 2.
+    Combine spectra using a (weighted) mean. The output is a python list with mask wavelength in position 0, wieghted mean flux in position 1, and "variance of mean" (sigma_mu^2) in position 2. If no flux uncertainties are given, then a straight mean and variance are computed. If no mask is given, the wavelength array of the first spectrum will be used as mask. 
     
     This function mimics IDL mc_meancomb (by Mike Cushing), with some restrictions.
     
     *spectra*
-        Python list of spectra, where each spectrum is a python list as well, having wavelength in position 0, flux in position 1 and uncertainties in position 2. *Important*: flux array cannot have nan values.
-    '''
+        Python list of spectra, where each spectrum is a python list as well, having wavelength in position 0, flux in position 1, and optional uncertainties in position 2.
+    *mask*
+      Array of wavelengths to be used as mask for all other spectra.
+    *robust*
+      Float, the sigma threshold to throw bada flux data points out. If none given, then all flux data points will be used.
     
-    # 1. Interpolate all spectra using mask
-    # Use x-axis (i.e. wl) values of first spectrum as mask for all others
-    wl_mask   = spectra[0][0]
+    '''
+    # Check inputs
+    try:
+        spectra[0]
+    except TypeError:
+        print 'Spectra invalid.'
+        return
+    if mask is not None:
+        try:
+            mask[0]
+        except TypeError:
+            print 'Mask invalid.'
+            return
+    if robust is not None:
+        try:
+            float(robust)
+        except TypeError:
+            print 'Robust invalid.'
+            return
+    
+    # 1. Generate mask using the first spectrum given
+    if mask is None:
+        # Use x-axis (i.e. wl) values of first spectrum as mask for all others
+        wl_mask = spectra[0][0]
+    else:
+        wl_mask = mask
     numPoints = len(wl_mask)
     numSpec = len(spectra)
     
-    # 3D-array that will hold interpolated spectra
-    # (it omits wl axis, since all spectra have the same one)
-    ip_spectra = numpy.zeros((numPoints, 2, numSpec)) * numpy.nan
+    # 2. Check if uncertainties were given
+    uncsGiven = True
+    for spec in spectra:
+        if uncsGiven:
+            try:
+                uncs = spec[2]
+            except IndexError:
+                uncsGiven = False
+                continue
+            nanIdx = np.where(np.isfinite(uncs))
+            if len(nanIdx[0]) == 0:
+                uncsGiven = False
     
+    # 3D-array that will hold interpolated spectra
+    # (it omits wavelength dimension, since all spectra have the same one)
+    if uncsGiven:
+        dims = 2
+    else:
+        dims = 1
+    ip_spectra = np.zeros((numPoints, dims, numSpec)) * np.nan
+    
+    # 3. Interpolate spectra using mask
     for spIdx, spec in enumerate(spectra):
-        wls    = spec[0]
-        fluxes = spec[1]
-        errors = spec[2]
+        wl = spec[0]
+        fluxRaw= spec[1]
+        if uncsGiven:
+            unc = spec[2]
+        
+        # Eliminate outliers if requested
+        if robust is not None:
+            flux = clean_outliers(fluxRaw, robust)
+        else:
+            flux = fluxRaw
         
         if spIdx == 0:
             # No need to interpolate first spectrum
-            fluxes_new = fluxes
-            errors_new = errors
+            flux_new = flux
+            if uncsGiven:
+                unc_new = unc
         else:
-            ip_func_flux = scipy.interpolate.interp1d(wls, fluxes, bounds_error=False)
-            ip_func_err  = scipy.interpolate.interp1d(wls, errors, bounds_error=False)
-            fluxes_new = ip_func_flux(wl_mask.tolist())
-            errors_new = ip_func_err(wl_mask.tolist())
+            ip_func_flux = spi.interp1d(wl, flux, bounds_error=False)
+            flux_new = ip_func_flux(wl_mask.tolist())
+            if uncsGiven:
+                ip_func_unc = spi.interp1d(wl, unc, bounds_error=False)
+                unc_new = ip_func_unc(wl_mask.tolist())
         
-        ip_spectra[:,0,spIdx] = fluxes_new
-        ip_spectra[:,1,spIdx] = errors_new
+        ip_spectra[:,0,spIdx] = flux_new
+        if uncsGiven:
+            ip_spectra[:,1,spIdx] = unc_new
     
-    # 2. Calculate weighted mean of flux values
-    mvar = 1. / numpy.nansum(1. / ip_spectra[:,1,:], axis=1)
-    mean = numpy.nansum(ip_spectra[:,0,:] / ip_spectra[:,1,:], axis=1) * mvar
+    # 4. Calculate weighted mean of flux values
+    if uncsGiven:
+        mvar = 1. / np.nansum(1. / ip_spectra[:,1,:], axis=1)
+        mean = np.nansum(ip_spectra[:,0,:] / ip_spectra[:,1,:], axis=1) * mvar
+    else:
+        mean = sps.nanmean(ip_spectra[:,0,:], axis=1)
+        mvar = sps.nanstd(ip_spectra[:,0,:], axis=1) ** 2 / (numPoints - 1)
     
     return [wl_mask, mean, mvar]
 
@@ -342,7 +434,7 @@ def norm_spec(specData, limits, objID='NA'):
         if spData is None:
             continue
         
-        tmpNans = numpy.where(numpy.isfinite(spData[1]))
+        tmpNans = np.where(np.isfinite(spData[1]))
         if len(tmpNans[0]) != 0:
             if spData[0][tmpNans[0][0]] > smallest:
                 smallest = spData[0][tmpNans[0][0]]
@@ -366,7 +458,7 @@ def norm_spec(specData, limits, objID='NA'):
             errors = False
         
         # 3) Determine minimum wavelength value for band
-        smallIdx = numpy.where(spData[0] < limits[0])
+        smallIdx = np.where(spData[0] < limits[0])
         
         # If lower limit < all values in spectrum wavelength points, then
         # make band's minimum value = first data point in spectrum
@@ -383,7 +475,7 @@ def norm_spec(specData, limits, objID='NA'):
             minIdx = smallIdx[0][-1] + 1
         
         # 4) Determine maximum wavelength value for band
-        largeIdx = numpy.where(spData[0] > limits[1])
+        largeIdx = np.where(spData[0] > limits[1])
         
         # If upper limit > all values in spectrum wavelength points, then
         # make band's maximum value = last data point in spectrum
@@ -413,15 +505,15 @@ def norm_spec(specData, limits, objID='NA'):
             errorSelect = spData[2][minIdx:maxIdx]
         
         # 8) Normalize spectrum using arithmetic mean
-        notNans = numpy.where(numpy.isfinite(fluxSelect))
-        avgFlux = numpy.mean(fluxSelect[notNans])
+        notNans = np.where(np.isfinite(fluxSelect))
+        avgFlux = np.mean(fluxSelect[notNans])
         finalFlux = spData[1] / avgFlux
         
         finalData[spIdx] = [spData[0], finalFlux]
         
         if errors is True:
-            notNans  = numpy.where(numpy.isfinite(errorSelect))
-            avgError = numpy.mean(errorSelect[notNans])
+            notNans  = np.where(np.isfinite(errorSelect))
+            avgError = np.mean(errorSelect[notNans])
             finalErrors = spData[2] / avgError
             
             finalData[spIdx] = [spData[0], finalFlux, finalErrors]
@@ -492,7 +584,7 @@ def plot_spec(specData, ploterrors=False):
     return fig
 
 
-def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=False, plot=False, verbose=False):
+def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=True, plot=False, verbose=False):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
@@ -532,7 +624,7 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         
         # 3.1. Get data from fits file
         try:
-            fitsData, fitsHeader = pyfits.getdata(spFile, header=True)
+            fitsData, fitsHeader = pf.getdata(spFile, header=True)
         except IOError:
             print str(spFile) + ' not found.'
             continue
@@ -550,7 +642,7 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         #               + ' is NOT linear and will not be used.'
         #         continue
         
-        # 3.3. Get flux, error data, and get wl data when available
+        # 3.3. Get flux & error data; get wl data when available as array
         #      (returns wl in pos. 0, flux in pos. 1, error values in pos. 2)
         specData[spFileIdx] = __get_spec(fitsData, fitsHeader, spFile, errors)
         
@@ -573,13 +665,13 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
                 specData[spFileIdx][0] = specData[spFileIdx][0] / 10000
        
        # 3.6. Set zero flux values as nans
-        zeros = numpy.where(specData[spFileIdx][1] == 0)
+        zeros = np.where(specData[spFileIdx][1] == 0)
         if len(zeros[0]) > 0:
-            specData[spFileIdx][1][zeros] = numpy.nan
+            specData[spFileIdx][1][zeros] = np.nan
         
         # 3.7. Set negative flux values equal to zero if desired
         if negToZero:
-            negIdx = numpy.where(specData[spFileIdx][1] < 0)
+            negIdx = np.where(specData[spFileIdx][1] < 0)
             if len(negIdx[0]) > 0:
                 specData[spFileIdx][1][negIdx] = 0
                 if verbose:
@@ -641,7 +733,7 @@ def sel_band(specData, limits, objID='NA'):
             errors = False
         
         # 3) Determine minimum wavelength value for band
-        smallIdx = numpy.where(spData[0] < limits[0])
+        smallIdx = np.where(spData[0] < limits[0])
         
         # If lower limit < all values in spectrum wavelength points, then
         # make band's minimum value = first data point in spectrum
@@ -658,7 +750,7 @@ def sel_band(specData, limits, objID='NA'):
             minIdx = smallIdx[0][-1] + 1
         
         # 4) Determine maximum wavelength value for band
-        largeIdx = numpy.where(spData[0] > limits[1])
+        largeIdx = np.where(spData[0] > limits[1])
         
         # If upper limit > all values in spectrum wavelength points, then
         # make band's maximum value = last data point in spectrum
@@ -724,7 +816,7 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
     for specIdx,spec in enumerate(specData):
         if spec is not None:
             if fitsExist and specFiles[specIdx] is not None:
-                fitsData = pyfits.open(specFiles[specIdx])
+                fitsData = pf.open(specFiles[specIdx])
                 # Find Key names for resolution in fits file header
                 setRes = set(KEY_RES).intersection(set(fitsData[0].header.keys()))
                 # Get resolution data from fits file header
@@ -746,8 +838,8 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
             
             # Reduce spectrum resolution if greater than goodRes
             if width > 0:
-                notNans = numpy.where(numpy.isfinite(spec[1]))
-                spec[1][notNans] = scipy.ndimage.filters.uniform_filter( \
+                notNans = np.where(np.isfinite(spec[1]))
+                spec[1][notNans] = spn.filters.uniform_filter( \
                                    spec[1][notNans], size=width)
     
     return specData
@@ -785,7 +877,7 @@ def __create_waxis(fitsHeader, lenData, fileName):
             valOff  = fitsHeader[keyName]
         
         # generate wl axis
-        wAxis = (numpy.arange(lenData) * valDelt) + valMin - (valOff * valDelt)
+        wAxis = (np.arange(lenData) * valDelt) + valMin - (valOff * valDelt)
         
     else:
         wAxis = None
@@ -799,19 +891,19 @@ def __create_waxis(fitsHeader, lenData, fileName):
 def __get_spec(fitsData, fitsHeader, fileName, errorVals):
 # *Function used by read_spec only*
 # (by Alejo)
-# Interprets spectral data from .fits file.
+# Interprets spectral data from fits file.
 # Returns wavelength (wl) data in pos. 0, flux data in pos. 1, 
-# and if requested, sigma (error) values in pos. 2.
+# and if requested, error values in pos. 2.
     
     if errorVals:
         validData = [None] * 3
     else:
         validData = [None] * 2
     
-    # Identify number of data sets in .fits file
+    # Identify number of data sets in fits file
     dimNum = len(fitsData)
     
-    # Identify data sets in .fits file
+    # Identify data sets in fits file
     fluxIdx  = None
     waveIdx  = None
     sigmaIdx = None
@@ -833,7 +925,7 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
     elif dimNum > 10:
     # Implies that only one data set in fits file: flux
         fluxIdx = -1
-        if numpy.isscalar(fitsData[0]):
+        if np.isscalar(fitsData[0]):
             fluxIdx = -1
         elif len(fitsData[0]) == 2:
         # Data comes in a xxxx by 2 matrix (ascii origin)
@@ -843,7 +935,7 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
                 tmpWave.append(pair[0])
                 tmpFlux.append(pair[1])
             fitsData = [tmpWave,tmpFlux]
-            fitsData = numpy.array(fitsData)
+            fitsData = np.array(fitsData)
             
             waveIdx = 0
             fluxIdx = 1
@@ -878,7 +970,7 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
     # Fetch sigma data set from .fits file, if requested
     if errorVals:
         if sigmaIdx is None:
-            validData[2] = numpy.array([numpy.nan] * len(validData[1]))
+            validData[2] = np.array([np.nan] * len(validData[1]))
         else:
             if len(fitsData[sigmaIdx]) == 1:
                 validData[2] = fitsData[sigmaIdx][0]
@@ -887,7 +979,7 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
         
         # If all sigma values have the same value, then replace them with nans
         if validData[2][10] == validData[2][11] == validData[2][12]:
-            validData[2] = numpy.array([numpy.nan] * len(validData[1]))
+            validData[2] = np.array([np.nan] * len(validData[1]))
     
     return validData
     
@@ -904,8 +996,8 @@ def __normalize(specData):
     if len(specData) == 3:
         specSigma = specData[2]
     
-    nonNanFlux = specFlux[numpy.isfinite(specFlux)]
-    avgFlux = numpy.mean(nonNanFlux)
+    nonNanFlux = specFlux[np.isfinite(specFlux)]
+    avgFlux = np.mean(nonNanFlux)
     
     specData[1] = specFlux / avgFlux
     if len(specData) == 3:
