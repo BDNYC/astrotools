@@ -6,7 +6,7 @@ The module **astrotools** is a set of functions for astrophysical analysis devel
 	Dan Feldman, Alejandro N |uacute| |ntilde| ez, Damian Sowinski
 
 :Date:
-    2012/05/18
+    2012/07/19
 
 :Repository:
     https://github.com/BDNYC/astrotools
@@ -179,7 +179,8 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
 def clean_outliers(data, thresh):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
-    Cleans a data from outliers by replacing them with numpy nans. A point *x* is identified as an outlier if |*x* - *med*| / *MAD* > thresh, where *med* is the median of the data values and *MAD* is the median absolute deviation, defined as 1.482 * median(|*x* - *med*|).
+    
+    Cleans a data from outliers by replacing them with numpy nans. A point *x* is identified as an outlier if \| *x* - *med* \| / *MAD* > *thresh*, where *med* is the median of the data values and *MAD* is the median absolute deviation, defined as 1.482 * median(\| *x* - *med* \|).
     
     This function mimics IDL mc_findoutliers (by Mike Cushing), with output differences.
     
@@ -299,16 +300,16 @@ def mean_comb(spectra, mask=None, robust=None):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
-    Combine spectra using a (weighted) mean. The output is a python list with mask wavelength in position 0, wieghted mean flux in position 1, and "variance of mean" (sigma_mu^2) in position 2. If no flux uncertainties are given, then a straight mean and variance are computed. If no mask is given, the wavelength array of the first spectrum will be used as mask. 
+    Combine spectra using a (weighted) mean. The output is a python list with mask wavelength in position 0, mean flux in position 1, and variance in position 2. If flux uncertainties are given, then mean is a weighted mean, and variance is the "variance of the mean" (|sigma|  :sub:`mean`  :sup:`2`). If no flux uncertainties are given, then mean is a straight mean (<x>), and variance is the square of the standard error of the mean (|sigma| :sup:`2`/n). If no mask is given, the wavelength array of the first spectrum will be used as mask.
     
     This function mimics IDL mc_meancomb (by Mike Cushing), with some restrictions.
     
     *spectra*
-        Python list of spectra, where each spectrum is a python list as well, having wavelength in position 0, flux in position 1, and optional uncertainties in position 2.
+        Python list of spectra, where each spectrum is an array having wavelength in position 0, flux in position 1, and optional uncertainties in position 2.
     *mask*
-      Array of wavelengths to be used as mask for all other spectra.
+      Array of wavelengths to be used as mask for all spectra. If none, then the wavelength array of the first spectrum is used as mask.
     *robust*
-      Float, the sigma threshold to throw bada flux data points out. If none given, then all flux data points will be used.
+      Float: the sigma threshold to throw bad flux data points out. If none given, then all flux data points will be used.
     
     '''
     # Check inputs
@@ -389,15 +390,18 @@ def mean_comb(spectra, mask=None, robust=None):
         if uncsGiven:
             ip_spectra[:,1,spIdx] = unc_new
     
-    # 4. Calculate weighted mean of flux values
+    # 4. Calculate mean and variance of flux values
     if uncsGiven:
         mvar = 1. / np.nansum(1. / ip_spectra[:,1,:], axis=1)
         mean = np.nansum(ip_spectra[:,0,:] / ip_spectra[:,1,:], axis=1) * mvar
     else:
+        mvar = sps.nanstd(ip_spectra[:,0,:], axis=1) ** 2 / numPoints
         mean = sps.nanmean(ip_spectra[:,0,:], axis=1)
-        mvar = sps.nanstd(ip_spectra[:,0,:], axis=1) ** 2 / (numPoints - 1)
     
-    return [wl_mask, mean, mvar]
+    # 5. Create the combined spectrum
+    specComb = [wl_mask, mean, mvar]
+    
+    return specComb
 
 
 def norm_spec(specData, limits, objID='NA'):
