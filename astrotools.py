@@ -445,8 +445,9 @@ def norm_spec(specData, limits, objID='NA'):
             if spData[0][tmpNans[0][-1]] < largest:
                 largest = spData[0][tmpNans[0][-1]]
     
-    limits[0] = smallest
-    limits[1] = largest
+    lims = [smallest, largest]
+#    limits[0] = smallest
+#    limits[1] = largest
     
     # Loop through each spectral data set
     for spIdx, spData in enumerate(specData):
@@ -462,7 +463,7 @@ def norm_spec(specData, limits, objID='NA'):
             errors = False
         
         # 3) Determine minimum wavelength value for band
-        smallIdx = np.where(spData[0] < limits[0])
+        smallIdx = np.where(spData[0] < lims[0])
         
         # If lower limit < all values in spectrum wavelength points, then
         # make band's minimum value = first data point in spectrum
@@ -479,7 +480,7 @@ def norm_spec(specData, limits, objID='NA'):
             minIdx = smallIdx[0][-1] + 1
         
         # 4) Determine maximum wavelength value for band
-        largeIdx = np.where(spData[0] > limits[1])
+        largeIdx = np.where(spData[0] > lims[1])
         
         # If upper limit > all values in spectrum wavelength points, then
         # make band's maximum value = last data point in spectrum
