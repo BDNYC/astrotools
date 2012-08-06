@@ -811,11 +811,15 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
     KEY_RES = ['RES','RP']
     
     # Convert into python list type when only one set of spectrum & fits-file
-    fitsExist = True
-    if isinstance(specFiles,types.StringTypes):
-        specFiles = [specFiles,]
-        specData  = [specData,]
-    else:
+    if len(specData) <= 3 and len(specData[0]) > 10:
+        specData = [specData]
+        if specFiles is None:
+            fitsExist = False
+        if isinstance(specFiles,types.StringTypes):
+            specFiles = [specFiles]
+            fitsExist = True
+    
+    if specFiles is None:
         fitsExist = False
     
     for specIdx,spec in enumerate(specData):
