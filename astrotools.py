@@ -6,7 +6,7 @@ The module **astrotools** is a set of functions for astrophysical analysis devel
 	Dan Feldman, Alejandro N |uacute| |ntilde| ez, Damian Sowinski
 
 :Date:
-    2012/07/19
+    2012/08/09
 
 :Repository:
     https://github.com/BDNYC/astrotools
@@ -296,7 +296,7 @@ def integrate(xyData):
     return integral
 
 
-def mean_comb(spectra, mask=None, robust=None):
+def mean_comb(spectra, mask=None, robust=None, extremes=False):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
@@ -309,7 +309,9 @@ def mean_comb(spectra, mask=None, robust=None):
     *mask*
       Array of wavelengths to be used as mask for all spectra. If none, then the wavelength array of the first spectrum is used as mask.
     *robust*
-      Float: the sigma threshold to throw bad flux data points out. If none given, then all flux data points will be used.
+      Float, the sigma threshold to throw bad flux data points out. If none given, then all flux data points will be used.
+    *extremes*
+      Boolean, whether to include the min and max flux values at each masked pixel.
     
     '''
     # Check inputs
@@ -398,8 +400,16 @@ def mean_comb(spectra, mask=None, robust=None):
         mvar = sps.nanstd(ip_spectra[:,0,:], axis=1) ** 2 / numPoints
         mean = sps.nanmean(ip_spectra[:,0,:], axis=1)
     
+    # 5. Calculate extreme flux values if requested
+    if extremes:
+        minF = np.nanmin(ip_spectra[:,0,:], axis=1)
+        maxF = np.nanmax(ip_spectra[:,0,:], axis=1)
+    
     # 5. Create the combined spectrum
-    specComb = [wl_mask, mean, mvar]
+    if extremes:
+        specComb = [wl_mask, mean, mvar, minF, maxF]
+    else:
+        specComb = [wl_mask, mean, mvar]
     
     return specComb
 
@@ -535,10 +545,10 @@ def plot_spec(specData, ploterrors=False):
     This is a quick and dirty tool to visualize a set of spectra. It is not meant to be a paper-ready format. You can use it, however, as a starting point.
     
     *specData*
-        Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
-    
+      Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
     *ploterrors*
-        Boolean: Include flux error bars when available. This will work only if all spectra have error values.
+      Boolean, whether to include flux error bars when available. This will work only if all spectra have error values.
+    
     '''
     
     # Check that there is data to plot
@@ -589,39 +599,39 @@ def plot_spec(specData, ploterrors=False):
     return fig
 
 
-def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=True, plot=False, verbose=False):
+def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=False, linear=False, verbose=True):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
-    Read spectral data from fits files. It returns a python list with wavelength in position 0, flux in position 1 and error values (if available and requested) in position 2. More than one fits file name can be provided simultaneously.
+    Read spectral data from fits files. It returns a list of numpy arrays with wavelength in position 0, flux in position 1 and error values (if requested) in position 2. More than one fits file name can be provided simultaneously.
     
     *specFiles*
-        String with fits file name (with full path); it can also be a python list of file names.
-    *aToMicron*
-        Boolean: If wavelength in fits file is in Angstrom, convert wavelength values into micrometers.
-    *negToZero*
-        Boolean: Set any negative flux values equal to zero.
-    *normal*
-        Boolean: Normalize the flux values using the simple average of all flux data points.
+      String with fits file name (with full path); it can also be a python list of file names.
     *errors*
-        Boolean: Return error values for the flux data; return nans if unavailable.
+      Boolean, whether to return error values for the flux data; return nans if unavailable.
+    *aToMicron*
+      Boolean, if wavelength units are in Angstrom, whether to convert them to microns.
+    *negToZero*
+      Boolean, whether to set negative flux values equal to zero.
     *plot*
-        Boolean: Plot the spectral data, including error bars when available
+      Boolean, whether to plot the spectral data, including error bars when available.
+    *linear*
+    Boolean, whether to return spectrum only if it is linear.
     *verbose*
-        Boolean: Print warning messages
+      Boolean, whether to print warning messages.
     '''
     
-    # 1. Convert specFiles into a list type if it is a string
+    # 1. Convert specFiles into a list type if it is only one file name
     if isinstance(specFiles, types.StringTypes):
         specFiles = [specFiles,]
     
     try:
         specFiles[0]
     except TypeError:
-        print 'File name is an unrecognizable python type.'
+        print 'File name(s) in invalid format.'
         return
     
-    # 2. Initialize array to store spectral
+    # 2. Initialize array to store spectra
     specData = [None] * len(specFiles)
     
     # 3. Loop through each file name:
@@ -631,25 +641,32 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         try:
             fitsData, fitsHeader = pf.getdata(spFile, header=True)
         except IOError:
-            print str(spFile) + ' not found.'
+            if verbose:
+                print str(spFile) + ' not found.'
             continue
         
-        # Section 3.2 commented out on 6/20/2012. Not necessary?
-        # # 3.2. Check if data in fits file is linear (if not, don't use data)
-        # KEY_TYPE = ['CTYPE1']
-        # setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
-        # if len(setType) == 0 and verbose:
-        #     print 'Flux data in ' + spFile + ' assumed to be linear.'
-        # if len(setType) != 0:
-        #     valType = fitsHeader[setType.pop()]
-        #     if valType.strip().upper() != 'LINEAR':
-        #         print 'Flux data in file ' + spFile \
-        #               + ' is NOT linear and will not be used.'
-        #         continue
+        # 3.2. Check if data in fits file is linear
+        KEY_TYPE = ['CTYPE1']
+        setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
+        if len(setType) == 0:
+            if verbose:
+                print 'Data in ' + spFile + ' assumed to be linear.'
+            isLinear = True
+        else:
+            valType = fitsHeader[setType.pop()]
+            if valType.strip().upper() == 'LINEAR':
+                isLinear = True
+            else:
+                isLinear = False
+        if linear and not isLinear:
+            if verbose:
+                print 'Data in ' + spFile + ' is not linear.'
+            return
         
         # 3.3. Get flux & error data; get wl data when available as array
         #      (returns wl in pos. 0, flux in pos. 1, error values in pos. 2)
-        specData[spFileIdx] = __get_spec(fitsData, fitsHeader, spFile, errors)
+        specData[spFileIdx] = __get_spec(fitsData, fitsHeader, spFile, errors, \
+                                         verb=verbose)
         
         if specData[spFileIdx] is None:
             continue
@@ -657,7 +674,8 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
         # 3.4. Generate wl axis when needed
         if specData[spFileIdx][0] is None:
             specData[spFileIdx][0] = __create_waxis(fitsHeader, \
-                                     len(specData[spFileIdx][1]), spFile)
+                                     len(specData[spFileIdx][1]), spFile, \
+                                     verb=verbose)
         
         # If no wl axis generated, then clear out all retrieved data for object
         if specData[spFileIdx][0] is None:
@@ -682,10 +700,6 @@ def read_spec(specFiles, aToMicron=False, negToZero=False, normal=False, errors=
                 if verbose:
                     print '%i negative data points found in %s.' \
                             % (len(negIdx[0]), spFile)
-        
-        # 3.8. Normalize flux data, if requested
-        if normal:
-            specData[spFileIdx] = __normalize(specData[spFileIdx])
     
     # 4. Plot the spectra if desired
     if plot:
@@ -792,40 +806,54 @@ def sel_band(specData, limits, objID='NA'):
     return finalData
 
 
-def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
+def smooth_spec(specData, oldres=None, newres=200, specFile=None, winWidth=10):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
-    Smooth flux data to resolution specified. The original spectrum resolution is determined more accurately by reading the metadata of the spectrum, and so this function prefers access to the fits file from where the spectrum was obtained, but it is not necessary.
+    Smooth flux data to new resolution specified. The method prefers to know the original spectrum resolution, which can be provided directly as *oldres*. Alternatively, the method can find the original resolution in the fits header of the spectrum, in which case you must provide the fits file name as *specFile*. If original resolution is unknown or no fits file is available, *newres* parameter is inoperable. In that case, use *winWidth* as the smoothing parameter.
     
     *specData*
-        Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
-    *specFiles*
-        String with name of the fits file (with full path) from where the spectrum was obtained; if dealing with several spectra, *specFiles* shall be a list of strings.
-    *goodRes*
-        Float with Signal-to-Noise resolution desired.
+      Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
+    *oldres*
+      Float with the original spectrum resolution, if known.
+    *newres*
+      Float with resolution desired. If neither *oldres* nor *specFile* is provided, *newres* is inoperable.
+    *specFile*
+      String with name of the fits file (with full path) from where the spectrum was obtained; if dealing with several spectra, *specFiles* shall be a list of strings.
     *winWidth*
-        Float with width of smoothing window; used when spectrum resolution is unknown.
+      Float with width of smoothing window; use when original spectrum resolution is unknown.
     '''
     # Define key names for resolution in fits file
     KEY_RES = ['RES','RP']
     
-    # Convert into python list type when only one set of spectrum & fits-file
+    if specFile is None:
+        fitsExist = False
+    else:
+        fitsExist = True
+    
+    # Convert into python list type when only one set of spectrum and fits file
     if len(specData) <= 3 and len(specData[0]) > 10:
         specData = [specData]
-        if specFiles is None:
-            fitsExist = False
-        if isinstance(specFiles,types.StringTypes):
-            specFiles = [specFiles]
-            fitsExist = True
+    if isinstance(specFile,types.StringTypes):
+        specFile = [specFile]
     
-    if specFiles is None:
-        fitsExist = False
-    
+    smoothData = []
     for specIdx,spec in enumerate(specData):
         if spec is not None:
-            if fitsExist and specFiles[specIdx] is not None:
-                fitsData = pf.open(specFiles[specIdx])
+            # Get spectrum columns
+            wls = np.array(spec[0])
+            fluxes = np.array(spec[1])
+            try:
+                errs = np.array(spec[2])
+            except IndexError:
+                errs = None
+            
+            # Get original resolution from oldres, if provided
+            if oldres is not None:
+                origRes = oldres
+            # If oldres not provided, then get original resolution from fits file
+            elif fitsExist and specFile[specIdx] is not None:
+                fitsData = pf.open(specFile[specIdx])
                 # Find Key names for resolution in fits file header
                 setRes = set(KEY_RES).intersection(set(fitsData[0].header.keys()))
                 # Get resolution data from fits file header
@@ -839,66 +867,75 @@ def smooth_spec(specData, specFiles=None, goodRes=200, winWidth=10):
                 origRes = 0
             
             # Determine width of smoothing window
-            width = 0 # Width of smoothing window
-            if origRes > goodRes:
-                width = origRes / goodRes
+            width = 0
+            if origRes > newres:
+                width = origRes / newres
             elif origRes == 0:
                 width = winWidth
             
-            # Reduce spectrum resolution if greater than goodRes
+            # Reduce spectrum resolution if greater than newres
             if width > 0:
-                notNans = np.where(np.isfinite(spec[1]))
-                spec[1][notNans] = spn.filters.uniform_filter( \
-                                   spec[1][notNans], size=width)
+                notNans = np.where(np.isfinite(fluxes))
+                fluxes[notNans] = spn.filters.uniform_filter( \
+                                  fluxes[notNans], size=width)
+            
+            # Append to output
+            if errs is None:
+                smoothData.append([wls, fluxes])
+            else:
+                smoothData.append([wls, fluxes, errs])
     
-    return specData
+    return smoothData
 
 
 # IV ++++++++++++++++++++ NON-PUBLIC FUNCTIONS ++++++++++++++++++++++++++++++++
 # Functions used by Global Functions; these are not meant to be used directly by end users of astrotools. Precede function names by double underscore.
-def __create_waxis(fitsHeader, lenData, fileName):
-# *Function used by read_spec only*
+def __create_waxis(fitsHeader, lenData, fileName, verb=True):
+# Function used by read_spec only
 # (by Alejo)
-# Generates a wavelength (wl) axis using header data from .fits file.
+# Generates a wavelength (wl) axis using header data from fits file.
     
-    # Define Key names in
-    KEY_MIN  = ['CRVAL1']            # Min wl
-    KEY_DELT = ['CDELT1','CD1_1']    # Delta of wl
-    KEY_OFF  = ['LTV1']              # Offset in wl to subsection start
+    # Define key names in
+    KEY_MIN  = ['COEFF0','CRVAL1']         # Min wl
+    KEY_DELT = ['COEFF1','CDELT1','CD1_1'] # Delta of wl
+    KEY_OFF  = ['LTV1']                    # Offset in wl to subsection start
     
-    # Find Key names for minimum wl, delta, and wl offset in .fits file header
+    # Find key names for minimum wl, delta, and wl offset in fits header
     setMin  = set(KEY_MIN).intersection(set(fitsHeader.keys()))
     setDelt = set(KEY_DELT).intersection(set(fitsHeader.keys()))
     setOff  = set(KEY_OFF).intersection(set(fitsHeader.keys()))
     
     # Get the values for minimum wl, delta, and wl offset, and generate axis
     if len(setMin) >= 1 and len (setDelt) >= 1:
-        keyName = setMin.pop()
-        valMin  = fitsHeader[keyName]
+        nameMin = setMin.pop()
+        valMin  = fitsHeader[nameMin]
         
-        keyName = setDelt.pop()
-        valDelt = fitsHeader[keyName]
+        nameDelt = setDelt.pop()
+        valDelt  = fitsHeader[nameDelt]
         
         if len(setOff) == 0:
             valOff = 0
         else:
-            keyName = setOff.pop()
-            valOff  = fitsHeader[keyName]
+            nameOff = setOff.pop()
+            valOff  = fitsHeader[nameOff]
         
         # generate wl axis
-        wAxis = (np.arange(lenData) * valDelt) + valMin - (valOff * valDelt)
+        if nameMin == 'COEFF0':
+            # SDSS fits files
+            wAxis = 10 ** (np.arange(lenData) * valDelt + valMin)
+        else:
+            wAxis = (np.arange(lenData) * valDelt) + valMin - (valOff * valDelt)
         
     else:
         wAxis = None
-        print 'Could not re-create a wavelength axis for ' \
-              + fileName + '.'
+        if verb:
+            print 'Could not re-create wavelength axis for ' + fileName + '.'
     
     return wAxis
-    
 
 
-def __get_spec(fitsData, fitsHeader, fileName, errorVals):
-# *Function used by read_spec only*
+def __get_spec(fitsData, fitsHeader, fileName, errorVals, verb=True):
+# Function used by read_spec only
 # (by Alejo)
 # Interprets spectral data from fits file.
 # Returns wavelength (wl) data in pos. 0, flux data in pos. 1, 
@@ -927,10 +964,13 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
         fluxIdx  = 1
         sigmaIdx = 2
     elif dimNum == 4:
-    # Data sets in fits file are: 0-flux clean, 1-flux raw, 2-background,
-    #                             3-sigma clean
+    # 0-flux clean, 1-flux raw, 2-background, 3-sigma clean
         fluxIdx  = 0
         sigmaIdx = 3
+    elif dimNum == 5:
+    # 0-flux, 1-continuum substracted flux, 2-sigma, 3-mask array, 4-unknown
+        fluxIdx  = 0
+        sigmaIdx = 2
     elif dimNum > 10:
     # Implies that only one data set in fits file: flux
         fluxIdx = -1
@@ -954,20 +994,22 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
     else:
         fluxIdx = None
         
-    # Fetch wave data set from .fits file
+    # Fetch wave data set from fits file
     if fluxIdx is None:
-    # No interpretation known for .fits file data sets
+    # No interpretation known for fits file data sets
         validData = None
-        print 'Unable to interpret data sets in ' + fileName + '.'
+        if verb:
+            print 'Unable to interpret data in ' + fileName + '.'
         return validData
     else:
         if waveIdx is not None:
-            if len(fitsData[waveIdx]) == 1: # Data set may be a 1-item list
+            if len(fitsData[waveIdx]) == 1:
+            # Data set may be a 1-item list
                 validData[0] = fitsData[waveIdx][0]
             else:
                 validData[0] = fitsData[waveIdx]
     
-    # Fetch flux data set from .fits file
+    # Fetch flux data set from fits file
     if fluxIdx == -1:
         validData[1] = fitsData
     else:
@@ -976,7 +1018,7 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
         else:
             validData[1] = fitsData[fluxIdx]
     
-    # Fetch sigma data set from .fits file, if requested
+    # Fetch sigma data set from fits file, if requested
     if errorVals:
         if sigmaIdx is None:
             validData[2] = np.array([np.nan] * len(validData[1]))
@@ -986,34 +1028,12 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals):
             else:
                 validData[2] = fitsData[sigmaIdx]
         
-        # If all sigma values have the same value, then replace them with nans
+        # If all sigma values have the same value, replace them with nans
         if validData[2][10] == validData[2][11] == validData[2][12]:
             validData[2] = np.array([np.nan] * len(validData[1]))
     
     return validData
-    
 
-
-def __normalize(specData):
-# *Function used by read_spec only*
-# (by Alejo)
-# Normalizes the flux (and sigma if present) data using the mean flux of the
-# whole set.
-    
-    specFlux = specData[1]
-    
-    if len(specData) == 3:
-        specSigma = specData[2]
-    
-    nonNanFlux = specFlux[np.isfinite(specFlux)]
-    avgFlux = np.mean(nonNanFlux)
-    
-    specData[1] = specFlux / avgFlux
-    if len(specData) == 3:
-        specData[2] = specSigma / avgFlux
-    
-    return specData
-    
 
 # V +++++++++++++++++++++++++ PUBLIC CLASSES ++++++++++++++++++++++++++++++++++
 # Classes meant to be used by end users of astrotools. Capitalize class names.
