@@ -605,7 +605,7 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
     
     Read spectral data from fits or ascii files. It returns a list of numpy arrays with wavelength in position 0, flux in position 1 and error values (if requested) in position 2. More than one file name can be provided simultaneously.
     
-    **Limitations**: Due to a lack of set framework for ascii file headers, this function assumes ascii files to have wavelength in column 1, flux in column 2, and (optional) error in column 3. Use of the 'linear' kwarg is discouraged for ascii files. Fits files that have multiple spectral orders will not be interpreted correctly with this function.
+    **Limitations**: Due to a lack of set framework for ascii file headers, this function assumes ascii files to have wavelength in column 1, flux in column 2, and (optional) error in column 3. Ascii spectra are assumed to be linear, so the kwarg *linear* is disabled for ascii files. Fits files that have multiple spectral orders will not be interpreted correctly with this function.
     
     *specFiles*
       String with fits file name (with full path); it can also be a python list of file names.
