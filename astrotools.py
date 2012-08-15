@@ -603,7 +603,7 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
-    Read spectral data from fits files. It returns a list of numpy arrays with wavelength in position 0, flux in position 1 and error values (if requested) in position 2. More than one fits file name can be provided simultaneously.
+    Read spectral data from fits or ascii files. It returns a list of numpy arrays with wavelength in position 0, flux in position 1 and error values (if requested) in position 2. More than one fits or ascii file name can be provided simultaneously. Due to a lack of set framework for ascii file headers, these files are assumed to have wavelength in column 1, flux in column 2, and error(if included) in column 3. Use of the 'linear' kwarg is discouraged for ascii files. 
     
     *specFiles*
       String with fits file name (with full path); it can also be a python list of file names.
@@ -650,22 +650,30 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
             except IOError:
                 print 'Could not open ' + str(spFile) + '.'
                 continue
-        # Assume ascii file otherwise
+        # Assume ascii file otherwise (isFits = False)
         else:
             try:
-                print 'Under construction.'
-                return
-                # Use asciidata module (as "ad").
-                # The end result must be a python list (called "specData") with the wl values as a numpy array in position 0 of the list, flux values as a numpy array in position 1 of list, and (if available) error values as a numpy array in position 2 of the list.
-                # Step 3.2 should check (when header available) whether data is linear.
-                # Steps 3.3 & 3.4 are for fits files only.
-                # Steps 3.5 to 5 need not be modified. They will be able to handle specData normally.
+                aData = ad.open(spFile)
+                specData[spFileIdx] = [aData[0].tonumpy(),aData[1].tonumpy()]
+                if len(aData)>=3 and errors:
+                    specData[spFileIdx].append(aData[2].tonumpy())
+                # Check (when header available) whether data is linear.
+                if aData.header:
+                    lindex = str(aData.header).upper().find('LINEAR')
+                    if lindex == -1:
+                        isLinear = False
+                    else:
+                        isLinear = True
+                    if linear and not isLinear:
+                        if verbose:
+                            print 'Data in ' + spFile + ' is not linear.'
+                        return
             except IOError:
                 if verbose:
                     print 'Could not open ' + str(spFile) + '.'
                 continue
         
-        # 3.2. Check if data in fits file is linear
+        # 3.3. Check if data in fits file is linear
         if isFits:
             KEY_TYPE = ['CTYPE1']
             setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
@@ -684,7 +692,7 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
                     print 'Data in ' + spFile + ' is not linear.'
                 return
         
-        # 3.3. Get wl, flux & error data from fits file
+        # 3.4. Get wl, flux & error data from fits file
         #      (returns wl in pos. 0, flux in pos. 1, error values in pos. 2)
         if isFits:
             specData[spFileIdx] = __get_spec(fitsData, fitsHeader, spFile, errors, \
