@@ -27,7 +27,7 @@ import pdb
 import types
 
 # Third party Python modules
-import asciidata
+import asciidata as ad
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -237,7 +237,7 @@ def create_ascii(listObj, saveto=None, header=None, delimiter='\t'):
             numRows = len(col)
     
     # Create ascii table
-    asciiObj = asciidata.create(numCols, numRows, delimiter=DELIMITER)
+    asciiObj = ad.create(numCols, numRows, delimiter=DELIMITER)
     
     # Populate the asciidata table
     for colIdx in range(asciiObj.ncols):
@@ -637,50 +637,70 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
     # 3. Loop through each file name:
     for spFileIdx,spFile in enumerate(specFiles):
         
-        # 3.1. Get data from fits file
-        try:
-            fitsData, fitsHeader = pf.getdata(spFile, header=True)
-        except IOError:
-            if verbose:
-                print str(spFile) + ' not found.'
-            continue
+        # 3.1 Determine the type of file it is
+        isFits = False
+        ext = spFile[-4:].lower()
+        if ext == 'fits' or ext == '.fit':
+            isFits = True
+            
+        # 3.2. Get data from file
+        if isFits:
+            try:
+                fitsData, fitsHeader = pf.getdata(spFile, header=True)
+            except IOError:
+                print 'Could not open ' + str(spFile) + '.'
+                continue
+        # Assume ascii file otherwise
+        else:
+            try:
+                print 'Under construction.'
+                return
+                # Use asciidata module (as "ad").
+                # The end result must be a python list (called "specData") with the wl values as a numpy array in position 0 of the list, flux values as a numpy array in position 1 of list, and (if available) error values as a numpy array in position 2 of the list.
+                # Step 3.2 should check (when header available) whether data is linear.
+                # Steps 3.3 & 3.4 are for fits files only.
+                # Steps 3.5 to 5 need not be modified. They will be able to handle specData normally.
+            except IOError:
+                if verbose:
+                    print 'Could not open ' + str(spFile) + '.'
+                continue
         
         # 3.2. Check if data in fits file is linear
-        KEY_TYPE = ['CTYPE1']
-        setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
-        if len(setType) == 0:
-            if verbose:
-                print 'Data in ' + spFile + ' assumed to be linear.'
-            isLinear = True
-        else:
-            valType = fitsHeader[setType.pop()]
-            if valType.strip().upper() == 'LINEAR':
+        if isFits:
+            KEY_TYPE = ['CTYPE1']
+            setType  = set(KEY_TYPE).intersection(set(fitsHeader.keys()))
+            if len(setType) == 0:
+                if verbose:
+                    print 'Data in ' + spFile + ' assumed to be linear.'
                 isLinear = True
             else:
-                isLinear = False
-        if linear and not isLinear:
-            if verbose:
-                print 'Data in ' + spFile + ' is not linear.'
-            return
+                valType = fitsHeader[setType.pop()]
+                if valType.strip().upper() == 'LINEAR':
+                    isLinear = True
+                else:
+                    isLinear = False
+            if linear and not isLinear:
+                if verbose:
+                    print 'Data in ' + spFile + ' is not linear.'
+                return
         
-        # 3.3. Get flux & error data; get wl data when available as array
+        # 3.3. Get wl, flux & error data from fits file
         #      (returns wl in pos. 0, flux in pos. 1, error values in pos. 2)
-        specData[spFileIdx] = __get_spec(fitsData, fitsHeader, spFile, errors, \
+        if isFits:
+            specData[spFileIdx] = __get_spec(fitsData, fitsHeader, spFile, errors, \
+                                             verb=verbose)
+            if specData[spFileIdx] is None:
+                continue
+        
+            # Generate wl axis when needed
+            if specData[spFileIdx][0] is None:
+                specData[spFileIdx][0] = __create_waxis(fitsHeader, \
+                                         len(specData[spFileIdx][1]), spFile, \
                                          verb=verbose)
-        
-        if specData[spFileIdx] is None:
-            continue
-        
-        # 3.4. Generate wl axis when needed
-        if specData[spFileIdx][0] is None:
-            specData[spFileIdx][0] = __create_waxis(fitsHeader, \
-                                     len(specData[spFileIdx][1]), spFile, \
-                                     verb=verbose)
-        
-        # If no wl axis generated, then clear out all retrieved data for object
-        if specData[spFileIdx][0] is None:
-            specData[spFileIdx] = None
-            continue
+            # If no wl axis generated, then clear out all retrieved data for object
+            if specData[spFileIdx][0] is None:
+                specData[spFileIdx] = None
+                continue
         
         # 3.5. Convert units in wl-axis from Angstrom into microns if desired
         if aToMicron:
@@ -957,8 +977,16 @@ def __get_spec(fitsData, fitsHeader, fileName, errorVals, verb=True):
     if dimNum == 1:
         fluxIdx = 0
     elif dimNum == 2:
-        waveIdx = 0
-        fluxIdx = 1
+        if len(fitsData[0]) == 1:
+            sampleData = fitsData[0][0][20]
+        else:
+            sampleData = fitsData[0][20]
+        if sampleData < 0.0001:
+            # 0-flux, 1-unknown
+            fluxIdx  = 0
+        else:
+            waveIdx = 0
+            fluxIdx = 1
     elif dimNum == 3:
         waveIdx  = 0
         fluxIdx  = 1
