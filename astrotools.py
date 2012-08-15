@@ -618,7 +618,7 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
     *plot*
       Boolean, whether to plot the spectral data, including error bars when available.
     *linear*
-    Boolean, whether to return spectrum only if it is linear.
+      Boolean, whether to return spectrum only if it is linear. If it cannot verify linearity, it will assume linearity.
     *verbose*
       Boolean, whether to print warning messages.
     '''
@@ -656,20 +656,20 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
         else:
             try:
                 aData = ad.open(spFile)
-                specData[spFileIdx] = [aData[0].tonumpy(),aData[1].tonumpy()]
-                if len(aData)>=3 and errors:
+                specData[spFileIdx] = [aData[0].tonumpy(), aData[1].tonumpy()]
+                if len(aData) >= 3 and errors:
                     specData[spFileIdx].append(aData[2].tonumpy())
-                # Check (when header available) whether data is linear.
-                if aData.header:
-                    lindex = str(aData.header).upper().find('LINEAR')
-                    if lindex == -1:
-                        isLinear = False
-                    else:
-                        isLinear = True
-                    if linear and not isLinear:
-                        if verbose:
-                            print 'Data in ' + spFile + ' is not linear.'
-                        return
+                # # Check (when header available) whether data is linear.
+                # if aData.header:
+                #     lindex = str(aData.header).upper().find('LINEAR')
+                #     if lindex == -1:
+                #         isLinear = False
+                #     else:
+                #         isLinear = True
+                #     if linear and not isLinear:
+                #         if verbose:
+                #             print 'Data in ' + spFile + ' is not linear.'
+                #         return
             except IOError:
                 if verbose:
                     print 'Could not open ' + str(spFile) + '.'
