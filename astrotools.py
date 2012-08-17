@@ -414,18 +414,18 @@ def mean_comb(spectra, mask=None, robust=None, extremes=False):
     return specComb
 
 
-def norm_spec(specData, limits, objID='NA'):
+def norm_spec(specData, limits, flag=False):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
     Normalize a spectrum using a band (i.e. a portion) of the spectrum specified by *limits*.
     
     *specData*
-        Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
+      Spectrum as a Python list with wavelength in position 0, flux in position 1, and (optional) error values in position 2. More than one spectrum can be provided simultaneously, in which case *specData* shall be a list of lists.
     *limits*
-        Python list with lower limit in position 0 and upper limit in position 1. If more than one spectrum provided, these limits will be applied to all spectra.
-    *objID*
-        String to be used as an identifier for spectrum; if dealing with several spectra, *objID* shall be a list of strings. For error printing purposes only.
+      Python list with lower limit in position 0 and upper limit in position 1. If more than one spectrum provided, these limits will be applied to all spectra.
+    *flag*
+      Boolean, whether to warn if normalization limits were shrinked in the case when they fall outside spectrum. If set to *True*, *norm_spec* returns the normalized spectra AND a boolean flag.
     '''
     
     # Convert specData to list or spectra if it consists only of one
@@ -443,6 +443,7 @@ def norm_spec(specData, limits, objID='NA'):
     # Re-define normalizing band (specified in limits) for each spectrum in case
     # the limits fall outside of the spectrum range
     all_lims = [None] * len(specData)
+    flagged = False
     for spIdx, spData in enumerate(specData):
         smallest = limits[0]
         largest  = limits[1]
@@ -453,8 +454,10 @@ def norm_spec(specData, limits, objID='NA'):
         if len(tmpNans[0]) != 0:
             if spData[0][tmpNans[0][0]] > smallest:
                 smallest = spData[0][tmpNans[0][0]]
+                flagged = True
             if spData[0][tmpNans[0][-1]] < largest:
                 largest = spData[0][tmpNans[0][-1]]
+                flagged = True
         
         all_lims[spIdx] = [smallest, largest]
     lims = [smallest, largest]
@@ -483,8 +486,7 @@ def norm_spec(specData, limits, objID='NA'):
         # If lower limit > all values in spectrum wavelength points, then
         # no band can be selected
         elif len(smallIdx[0]) == len(spData[0]):
-            print 'norm_spec: the wavelength data for object %s is outside ' \
-                  + 'the given limits.' %objID[spIdx]
+            print 'norm_spec: the wavelength data for object is outside limits.' 
             continue
         else:
             minIdx = smallIdx[0][-1] + 1
@@ -500,16 +502,14 @@ def norm_spec(specData, limits, objID='NA'):
         # If upper limit < all values in spectrum wavelength points, then
         # no band can be selected
         elif len(largeIdx[0]) == len(spData[0]):
-            print 'norm_spec: the wavelength data for object %s is outside ' \
-                  + 'the given limits.' %objID[spIdx]
+            print 'norm_spec: the wavelength data for object is outside limits.'
             continue
         else:
             maxIdx = largeIdx[0][0]
         
         # 5) Check for consistency in the computed band limits
         if maxIdx - minIdx < 2:
-            print 'norm_spec: The Min and Max values specified for object %s ' \
-                  + 'yield no band.' %objID[spIdx]
+            print 'norm_spec: The Min and Max values specified yield no band.'
             continue
             
         # 6) Select flux band from spectrum
@@ -533,7 +533,10 @@ def norm_spec(specData, limits, objID='NA'):
             
             finalData[spIdx] = [spData[0], finalFlux, finalErrors]
     
-    return finalData
+    if flag:
+        return finalData, flagged
+    else:
+        return finalData
 
 
 def plot_spec(specData, ploterrors=False):
