@@ -602,7 +602,7 @@ def plot_spec(specData, ploterrors=False):
     return fig
 
 
-def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=False, linear=False, verbose=True):
+def read_spec(specFiles, errors=True, atomicron=False, negtonan=False, plot=False, linear=False, verbose=True):
     '''
     (by Alejandro N |uacute| |ntilde| ez)
     
@@ -614,9 +614,9 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
       String with fits file name (with full path); it can also be a python list of file names.
     *errors*
       Boolean, whether to return error values for the flux data; return nans if unavailable.
-    *aToMicron*
+    *atomicron*
       Boolean, if wavelength units are in Angstrom, whether to convert them to microns.
-    *negToZero*
+    *negtonan*
       Boolean, whether to set negative flux values equal to zero.
     *plot*
       Boolean, whether to plot the spectral data, including error bars when available.
@@ -716,23 +716,24 @@ def read_spec(specFiles, errors=True, aToMicron=False, negToZero=False, plot=Fal
                 continue
         
         # 3.5. Convert units in wl-axis from Angstrom into microns if desired
-        if aToMicron:
+        if atomicron:
             if specData[spFileIdx][0][-1] > 8000:
                 specData[spFileIdx][0] = specData[spFileIdx][0] / 10000
-       
-       # 3.6. Set zero flux values as nans
-        zeros = np.where(specData[spFileIdx][1] == 0)
-        if len(zeros[0]) > 0:
-            specData[spFileIdx][1][zeros] = np.nan
         
-        # 3.7. Set negative flux values equal to zero if desired
-        if negToZero:
+        # 3.6. Set negative flux values equal to zero (next step sets them to nans)
+        if negtonan:
             negIdx = np.where(specData[spFileIdx][1] < 0)
             if len(negIdx[0]) > 0:
                 specData[spFileIdx][1][negIdx] = 0
                 if verbose:
                     print '%i negative data points found in %s.' \
                             % (len(negIdx[0]), spFile)
+        
+        # 3.7. Set zero flux values as nans
+        zeros = np.where(specData[spFileIdx][1] == 0)
+        if len(zeros[0]) > 0:
+            specData[spFileIdx][1][zeros] = np.nan
+        
     
     # 4. Plot the spectra if desired
     if plot:
