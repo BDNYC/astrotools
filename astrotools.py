@@ -729,7 +729,7 @@ def read_spec(specFiles, errors=True, atomicron=False, negtonan=False, plot=Fals
                     print '%i negative data points found in %s.' \
                             % (len(negIdx[0]), spFile)
         
-        # 3.7. Set zero flux values as nans
+        # 3.7. Set zero flux values as nans (do this always)
         zeros = np.where(specData[spFileIdx][1] == 0)
         if len(zeros[0]) > 0:
             specData[spFileIdx][1][zeros] = np.nan
