@@ -674,8 +674,7 @@ def read_spec(specFiles, errors=True, atomicron=False, negtonan=False, plot=Fals
                 #             print 'Data in ' + spFile + ' is not linear.'
                 #         return
             except IOError:
-                if verbose:
-                    print 'Could not open ' + str(spFile) + '.'
+                print 'Could not open ' + str(spFile) + '.'
                 continue
         
         # 3.3. Check if data in fits file is linear
