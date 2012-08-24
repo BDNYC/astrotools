@@ -3,10 +3,10 @@
 The module **astrotools** is a set of functions for astrophysical analysis developed by Kelle Cruz's team at Hunter College and the American Museum of Natural History in New York City. It consists of an amalgamation of functions tailored primordialy to handle fits file spectral data.
 
 :Authors:
-	Dan Feldman, Alejandro N |uacute| |ntilde| ez, Damian Sowinski
+	Dan Feldman, Alejandro N |uacute| |ntilde| ez, Damian Sowinski, Jocelyn Ferrara
 
 :Date:
-    2012/08/09
+    2012/08/024
 
 :Repository:
     https://github.com/BDNYC/astrotools
@@ -27,7 +27,10 @@ import pdb
 import types
 
 # Third party Python modules
-import asciidata as ad
+try:
+    import asciidata as ad
+except ImportError:
+    raise SystemExit('This module requires AstroAsciiData module.')
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -604,7 +607,7 @@ def plot_spec(specData, ploterrors=False):
 
 def read_spec(specFiles, errors=True, atomicron=False, negtonan=False, plot=False, linear=False, verbose=True):
     '''
-    (by Alejandro N |uacute| |ntilde| ez)
+    (by Alejandro N |uacute| |ntilde| ez, Jocelyn Ferrara)
     
     Read spectral data from fits or ascii files. It returns a list of numpy arrays with wavelength in position 0, flux in position 1 and error values (if requested) in position 2. More than one file name can be provided simultaneously.
     
