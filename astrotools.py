@@ -178,6 +178,53 @@ def avg_flux(startW, endW, SpecData, median=False, verbose=True):
         
     return [avgflux, sigflux]
 
+def blackbody(lam, T, Flam=True):
+  """
+  (By Joe Filippazzo)
+   
+  Returns blackbody values via Planck's formula for given wavelengths *lam* in [um] at a temperature *T* in [K]. 
+  
+  *lam*
+    The input wavelength or wavelength numpy array in [um]
+  *T*
+    The blackbody temperature in [K] to compute
+  *Flam*
+    Boolean: Return flux density in [ergs][s-1][cm-2][cm-1] if False, (lambda)*(flux density) in [ergs][s-1][cm-2] if True
+  """
+  import numpy as np                 
+  h = 6.6260755E-27   # [erg*sec]
+  c = 2.997924E10     # [cm/sec]
+  k = 1.380658E-16    # [erg/K]
+  lam = lam*1e-4      # [um] => [cm]
+  if Flam:
+    return 2*h*c**2 / (lam**4 * (np.exp(h*c / (lam*k*T)) - 1))
+  else:
+    return 2*h*c**2 / (lam**5 * (np.exp(h*c / (lam*k*T)) - 1)) 
+
+def browse_db(deg=True):
+  '''
+  (By Joe Filippazzo)
+  
+  Creates a dictionary of U-numbers with name, RA and DEC provided.
+  
+  *deg*
+    Boolean: Returns dictionary objects RA and DEC in decimal degrees or hours, minutes, seconds.
+  '''
+  import pickle, BDNYC
+
+  # Initialize the database
+  f = open('/Users/Joe/Documents/Python/Modules/Python_Database/BDNYCData.txt','rb')
+  bdnyc = pickle.load(f)
+  f.close()
+
+  browse = {}
+  for i in bdnyc.browse():
+    if deg:
+      browse[i] = bdnyc.browse()[i][0], float(HMS2deg(ra=bdnyc.browse()[i][1])), float(HMS2deg(dec=bdnyc.browse()[i][2]))
+    else:
+      browse[i] = bdnyc.browse()[i][0], bdnyc.browse()[i][1], bdnyc.browse()[i][2]
+
+  return browse
 
 def clean_outliers(data, thresh):
     '''
@@ -213,6 +260,92 @@ def clean_outliers(data, thresh):
     
     return dataClean
 
+def composite(W1,F1,E1,W2,F2,E2, norm=False, merge=False):
+  '''
+  (By Joe Filippazzo)
+  
+  For given wavelength, flux and errors of two spectra, returns a composite spectrum either by normalization, flattening or concatenation. 
+  
+  *norm*
+    Boolean: Interpolates overlap and normalizes the lower spectrum to the upper. 
+  *merge*
+    Boolean: Just flattens the two spectra into one.
+  '''
+  from scipy import interp, isnan
+  import matplotlib.pyplot as plt
+  import scipy.optimize as opt
+  import numpy as np
+  global W, F, E
+
+  if merge:
+    W = sorted(W1+W2)
+    I = [W.index(i) for i in W if i in W2]
+    for i,f2,e2 in zip(list(set(I)),F2,E2):
+      F1.insert(i,f2)
+      E1.insert(i,e2)
+    F, E = F1, E1
+
+  else:
+    if max(W1) < min(W2):
+      W, F, E = W1 + W2, F1 + F2, E1 + E2
+
+    elif max(W2) < min(W1):
+      W, F, E = W2 + W1, F2 + F1, E2 + E1
+
+    else:
+      # Call whichever one is on top F1
+      if np.average(F2) > np.average(F1):
+        W1, F1, E1, W2, F2, E2 = W2, F2, E2, W1, F1, E1 
+
+      # Find area of overlap and interpolate F2
+      W1o = [w for w in W1 if W2[0] < w < W2[-1]]
+      W2o = [w for w in W2 if W1[0] < w < W1[-1]]
+      F1o = [f for w,f in zip(W1,F1) if W2[0] < w < W2[-1]]
+      F2o = [f for w,f in zip(W2,F2) if W1[0] < w < W1[-1]]
+      F2o = list(interp(W1o,W2o,F2o))
+      E1o = [e for w,e in zip(W1,E1) if W2[0] < w < W2[-1]]
+      E2o = [e for w,e in zip(W2,E2) if W1[0] < w < W1[-1]]
+      E2o = list(interp(W1o,W2o,E2o))
+      Eavg = [(e1+e2)/2 for e1,e2 in zip(E1o,E2o)]
+
+      if norm:
+        def errfunc(p, f1, f2):
+          return np.sum(abs(f1 - (f2 + p)))
+
+        p0 = 1000
+        norm = opt.fmin(errfunc, p0, args=(F1o, F2o))[0]
+        F2new = [f2+norm for f2 in F2o]
+        # Favg = [np.average([f1,f2],weights=[e1**(-1),e2**(-1)]) for f1,e1,f2,e2 in zip(F1o,E1o,F2new,E2o)]
+        Favg = [np.average([f1,f2]) for f1,f2 in zip(F1o,F2new)]
+
+      else:
+        norm = 0
+        # Favg = [np.average([f1,f2],weights=[e1**(-1),e2**(-1)]) for f1,e1,f2,e2 in zip(F1o,E1o,F2o,E2o)]
+        Favg = [np.average([f1,f2]) for f1,f2 in zip(F1o,F2o)]      
+
+      # Construct new curve from correct pieces 
+      if W2[0] > W1[0] and W2[-1] > W1[-1]:
+        # -=_
+        W = [w for w in W1 if w < W2[0]] + W1o + [w for w in W2 if w > W1[-1]]
+        F = [f for w,f in zip(W1,F1) if w < W2[0]] + Favg + [f+norm for w,f in zip(W2,F2) if w > W1[-1]]
+        E = [e for w,e in zip(W1,E1) if w < W2[0]] + Eavg + [e for w,e in zip(W2,E2) if w > W1[-1]]
+      elif W2[0] < W1[0] and W2[-1] < W1[-1]:
+        # _=-
+        W = [w for w in W2 if w < W1[0]] + W1o + [w for w in W1 if w > W2[-1]]
+        F = [f+norm for w,f in zip(W2,F2) if w < W1[0]] + Favg + [f for w,f in zip(W1,F1) if w > W2[-1]]
+        E = [e for w,e in zip(W2,E2) if w < W1[0]] + Eavg + [e for w,e in zip(W1,E1) if w > W2[-1]]
+      elif W2[0] > W1[0] and W2[-1] < W1[-1]:
+        # -=-
+        W = [w for w in W1 if w < W2[0]] + W1o + [w for w in W1 if w > W2[-1]]
+        F = [f for w,f in zip(W1,F1) if w < W2[0]] + Favg + [f for w,f in zip(W1,F1) if w > W2[-1]]
+        E = [e for w,e in zip(W1,E1) if w < W2[0]] + Eavg + [e for w,e in zip(W1,E1) if w > W2[-1]]
+      else:
+        # _=_
+        W = [w for w in W2 if w < W1[0]] + W1o + [w for w in W2 if w > W1[-1]]
+        F = [f+norm for w,f in zip(W2,F2) if w < W1[0]] + Favg + [f+norm for w,f in zip(W2,F2) if w > W1[-1]]
+        E = [e for w,e in zip(W2,E2) if w < W1[0]] + Eavg + [e for w,e in zip(W2,E2) if w > W1[-1]]
+
+  return [W,F,E] 
 
 def create_ascii(listObj, saveto=None, header=None, delimiter='\t'):
     '''
@@ -265,6 +398,133 @@ def create_ascii(listObj, saveto=None, header=None, delimiter='\t'):
     
     return asciiObj
 
+def deg2HMS(ra='', dec='', Round=''):
+  '''                                                                               
+  (By Joe Filippazzo)
+  
+  Converts given RA and/or Dec in decimal degrees to H:M:S and degrees:M:S strings respectively. Use HMS2deg() below to convert the other way. 
+  
+  *ra*
+    Right Ascension float in decimal degrees (e.g. 13.266562)
+  *dec*
+    Declination float in decimal degrees (e.g. -5.194523)
+  '''
+  RA, DEC, rs, ds = '', '', '', ''
+
+  if dec:
+    if str(dec)[0] == '-':
+      ds, dec = '-', abs(dec)
+    deg = int(dec)
+    decM = abs(int((dec-deg)*60))
+
+    if Round == 'sec':
+      decS = int((abs((dec-deg)*60)-decM)*60)
+    elif Round == 'min':
+      decS = 0
+      if decM > 30:
+        decM = decM + 1
+    else:  
+      decS = (abs((dec-deg)*60)-decM)*60
+
+    DEC = '{0}{1} {2} {3}'.format(ds, deg, decM, decS)
+
+  if ra:
+    if str(ra)[0] == '-':
+      rs, ra = '-', abs(ra)
+    raH = int(ra/15)
+    raM = int(((ra/15)-raH)*60)
+
+    if Round == 'sec':
+      raS = int(((((ra/15)-raH)*60)-raM)*60)
+    elif Round == 'min':  
+      raS = 0
+      if raM > 30:
+        raM = raM + 1
+    else:  
+      raS = ((((ra/15)-raH)*60)-raM)*60
+
+    RA = '{0}{1} {2} {3}'.format(rs, raH, raM, raS)
+
+  if ra and dec:
+    return (RA, DEC)
+  else:
+    return RA or DEC
+
+def filter_info(band, Jy=False):
+  '''
+  (By Joe Filippazzo)
+   
+  Effective, min, and max wavelengths in [um] and zeropoint in [Jy] for SDSS, Johnson UBV, 2MASS, IRAC and WISE filters. Values from SVO filter profile service.
+  
+  *band*
+      Name of filter band (e.g. 'J' from 2MASS, 'W1' from WISE, etc.)
+  *Jy*
+      Boolean: Return zeropoint in [Jy] instead of [ergs][s-1][cm-2][cm-1]
+  '''
+  Filters = { 'u':   { 'eff': 0.3543,   'min': 0.304828, 'max': 0.402823, 'zp': 1568.54 }, 
+              'g':   { 'eff': 0.4770,   'min': 0.378254, 'max': 0.554926, 'zp': 3965.95 }, 
+              'r':   { 'eff': 0.6231,   'min': 0.541534, 'max': 0.698914, 'zp': 3161.98 }, 
+              'i':   { 'eff': 0.7625,   'min': 0.668947, 'max': 0.838945, 'zp': 2602.00 }, 
+              'z':   { 'eff': 0.9134,   'min': 0.796044, 'max': 1.083325, 'zp': 2244.67 },
+              'U':   { 'eff': 0.357065, 'min': 0.303125, 'max': 0.417368, 'zp': 1564.20 }, 
+              'B':   { 'eff': 0.437812, 'min': 0.363333, 'max': 0.549706, 'zp': 4023.81 }, 
+              'V':   { 'eff': 0.546611, 'min': 0.473333, 'max': 0.687500, 'zp': 3562.51 }, 
+              'J':   { 'eff': 1.2350,   'min': 1.080647, 'max': 1.406797, 'zp': 1594    }, 
+              'H':   { 'eff': 1.6620,   'min': 1.478738, 'max': 1.823102, 'zp': 1024    },
+              'K':   { 'eff': 2.1590,   'min': 1.954369, 'max': 2.355240, 'zp': 666.7   },
+              'Ks':  { 'eff': 2.1590,   'min': 1.954369, 'max': 2.355240, 'zp': 666.7   },
+              'CH1': { 'eff': 3.507511, 'min': 3.129624, 'max': 3.961436, 'zp': 277.22  },
+              'CH2': { 'eff': 4.436578, 'min': 3.917328, 'max': 5.056057, 'zp': 179.04  },
+              'CH3': { 'eff': 5.628102, 'min': 4.898277, 'max': 6.508894, 'zp': 113.85  },
+              'CH4': { 'eff': 7.589159, 'min': 6.299378, 'max': 9.587595, 'zp': 62.00   },
+              'W1':  { 'eff': 3.4,      'min': 2.754097, 'max': 3.872388, 'zp': 306.682 }, 
+              'W2':  { 'eff': 4.6,      'min': 3.963326, 'max': 5.341360, 'zp': 170.663 }, 
+              'W3':  { 'eff': 12,       'min': 7.443044, 'max': 17.26134, 'zp': 29.0448 }, 
+              'W4':  { 'eff': 22,       'min': 19.52008, 'max': 27.91072, 'zp': 8.2839  }}
+
+  Filt = Filters[band]
+  
+  if not Jy:
+    c = 2.997924E10  # [cm/sec]
+    Filt['zp'] = Filt['zp']*1E-23*c*(Filt['eff']**(-2))
+  
+  return Filt 
+
+def HMS2deg(ra='', dec=''):
+  '''                                                                               
+  (By Joe Filippazzo)
+  
+  Converts given RA and/or Dec in H:M:S and degrees:M:S respectively to decimal degree floats. Use deg2HMS() above to convert the other way. 
+  
+  *ra*
+    Right Ascension string in hours, minutes, seconds separated by spaces (e.g. '04 23 34.6')
+  *dec*
+    Declination string in degrees, minutes, seconds separated by spaces (e.g. '+12 02 45.1')
+  '''
+  RA, DEC, rs, ds = '', '', 1, 1
+
+  if dec:
+    if len(dec.split())==3:
+      D, M, S = [float(i) for i in dec.split()]
+    else:
+      # If seconds aren't given, set them to 0
+      D, M, S = float(dec.split()[0]), float(dec.split()[1]), 0
+    if str(D)[0] == '-':
+      ds, D = -1, abs(D)
+    deg = D + (M/60) + (S/3600)
+    DEC = '{0}'.format(deg*ds)
+
+  if ra:  
+    H, M, S = [float(i) for i in ra.split()]
+    if str(H)[0] == '-':
+      rs, H = -1, abs(H)
+    deg = (H*15) + (M/4) + (S/240)
+    RA = '{0}'.format(deg*rs)
+
+  if ra and dec:
+    return (RA, DEC)
+  else:
+    return RA or DEC 
 
 def integrate(xyData):
     '''
@@ -297,7 +557,6 @@ def integrate(xyData):
         return
     
     return integral
-
 
 def mean_comb(spectra, mask=None, robust=None, extremes=False):
     '''
@@ -923,6 +1182,39 @@ def smooth_spec(specData, oldres=None, newres=200, specFile=None, winWidth=10):
     
     return smoothData
 
+def specType(SpT):
+  '''
+  (By Joe Filippazzo)
+  
+  Converts between float and letter/number M, L, T and Y spectral types (e.g. 14.5 => 'L4.5' and 'T3' => 23).
+  
+  *SpT*
+    Float spectral type between 0.0 and 39.9 or letter/number spectral type between M0.0 and Y9.9
+  '''
+  if isinstance(SpT,str) and SpT[0] in ['M','L','T','Y'] and float(SpT[1:]) < 10:
+    try:
+      return [l+float(SpT[1:]) for m,l in zip(['M','L','T','Y'],[0,10,20,30]) if m == SpT[0]][0]
+    except ValueError:
+      print "Spectral type must be a float between 0 and 40 or a string of class M, L, T or Y."
+  elif isinstance(SpT,float) or isinstance(SpT,int) and 0.0 <= SpT < 40.0:
+    return '{}{}'.format('MLTY'[int(SpT//10)], SpT % 10.)
+  else:
+    return SpT
+    
+    
+def squaredError(a, b):
+  '''
+  (By Joe Filippazzo)
+  
+  Computes the squared error of two arrays. Pass to scipy.optimize.fmin() to find least square or use scipy.optimize.leastsq()
+  '''
+  from copy import copy
+  r = copy(a)
+  for i in range(len(a)):
+      r[i] -= b[i]
+      r[i] *= r[i]
+
+  return sum(r) 
 
 # IV ++++++++++++++++++++ NON-PUBLIC FUNCTIONS ++++++++++++++++++++++++++++++++
 # Functions used by Global Functions; these are not meant to be used directly by end users of astrotools. Precede function names by double underscore.
